@@ -11,6 +11,13 @@ const getRandomImage = () => {
   return `https://picsum.photos/600/600?random=${seed}`;
 };
 
+const formatTime = (time) => {
+  const minutes = Math.floor(time / 60);
+  const seconds = time % 60;
+
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+};
+
 // 🧠 Generate shape jigsaw
 const generateShapes = (size) => {
   const shapes = [];
@@ -88,6 +95,9 @@ export default function Home() {
   const [size, setSize] = useState(null);
   const [image, setImage] = useState(null);
   const [started, setStarted] = useState(false);
+
+  const [time, setTime] = useState(0);
+  const [running, setRunning] = useState(false);
 
   const [win, setWin] = useState(false);
 
@@ -202,6 +212,27 @@ export default function Home() {
     }
   }, [tiles]);
 
+  useEffect(() => {
+    if (!running) return;
+
+    const interval = setInterval(() => {
+      setTime((prev) => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [running]);
+
+  useEffect(() => {
+    if (!tiles.length) return;
+
+    const win = tiles.every((t) => t.locked);
+    if (win) {
+      setWin(true);
+      setRunning(false); // 🔥 STOP TIMER
+      playSound(winSound);
+    }
+  }, [tiles]);
+
   if (!mounted) return null;
 
   if (!started) {
@@ -256,10 +287,12 @@ export default function Home() {
           <button
             disabled={!size}
             onClick={() => {
-              if (!image) {
-                setImage(getRandomImage()); // 🔥 random otomatis
-              }
+              const img = image || getRandomImage(size);
+              setImage(img);
               setStarted(true);
+
+              setTime(0);       // reset waktu
+              setRunning(true); // mulai jalan
             }}
             className="w-full bg-blue-500 text-white py-2 rounded disabled:bg-gray-300"
           >
@@ -282,12 +315,16 @@ export default function Home() {
     return (
       <div className="flex flex-col items-center justify-center min-w-[300vw] min-h-[300vh] sm:min-w-screen sm:min-h-screen bg-gray-200">
         {/* HEADER */}
-        <h1 className="text-2xl font-bold mb-6 text-black">
+        <h1 className="text-2xl font-bold mb-6 text-black mt-40">
           Kezzle
         </h1>
 
+        <div className="bg-black text-white px-4 py-1 rounded">
+          ⏱ {formatTime(time)}
+        </div>
+
         {/* BOARD WRAPPER (yang dikasih spacing) */}
-        <div className="p-20"> {/* ganti margin 400px jadi padding */}
+        <div className="p-20 pt-0"> {/* ganti margin 400px jadi padding */}
           <DndContext onDragEnd={handleDragEnd}>
             <div
               style={{
@@ -312,7 +349,7 @@ export default function Home() {
                   inset 0 -6px 12px rgba(0,0,0,0.4)
                 `,
 
-                margin: "400px",
+                margin: "50px 400px 400px 400px",
               }}
             >
               {tiles.map((tile) => {
@@ -335,10 +372,14 @@ export default function Home() {
         </div>
 
         {win && (
-          <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50">
+          <div className="fixed inset-0 flex items-end justify-center z-50">
             
             <div className="bg-white p-6 rounded-xl text-center shadow-xl text-black">
               <h2 className="text-2xl font-bold mb-4">🎉 You Win!</h2>
+
+              <div className="bg-black text-white px-4 py-1 rounded mb-2">
+                Finish Time : {formatTime(time)}
+              </div>
 
               <div className="flex gap-2 justify-center">
                 <button
