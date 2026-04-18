@@ -2,10 +2,14 @@
 import { useState, useEffect } from "react";
 import { DndContext, useDraggable } from "@dnd-kit/core";
 
-const size = 5;
 const tileSize = 100;
 const SNAP_DISTANCE = 40;
 const tab = 20;
+
+const getRandomImage = () => {
+  const seed = Math.floor(Math.random() * 1000);
+  return `https://picsum.photos/600/600?random=${seed}`;
+};
 
 // 🧠 Generate shape jigsaw
 const generateShapes = (size) => {
@@ -69,11 +73,32 @@ const createPath = (shape) => {
   return d;
 };
 
+const playSound = (sound) => {
+  if (!sound) return;
+  sound.currentTime = 0;
+  sound.play();
+};
+
 // 🎮 Main Component
 export default function Home() {
   const [tiles, setTiles] = useState([]);
   const [shapes, setShapes] = useState([]);
   const [mounted, setMounted] = useState(false);
+
+  const [size, setSize] = useState(null);
+  const [image, setImage] = useState(null);
+  const [started, setStarted] = useState(false);
+
+  const [win, setWin] = useState(false);
+
+  const snapSound = typeof Audio !== "undefined" ? new Audio("/music/snap.mp3") : null;
+  const winSound = typeof Audio !== "undefined" ? new Audio("/music/win.mp3") : null;
+
+  useEffect(() => {
+    if (!started || !size) return;
+    setTiles(createTiles());
+    setShapes(generateShapes(size));
+  }, [started, size]);
 
   // 🎲 generate tiles (client only)
   const createTiles = () => {
@@ -119,60 +144,9 @@ export default function Home() {
     });
   };
 
-  const getNeighbors = (id) => {
-    const row = Math.floor(id / size);
-    const col = id % size;
-
-    return [
-      { id: id - size, dir: "top" },
-      { id: id + size, dir: "bottom" },
-      { id: id - 1, dir: "left" },
-      { id: id + 1, dir: "right" },
-    ].filter(n => n.id >= 0 && n.id < size * size);
-  };
-
-  const trySnapPieces = (tiles) => {
-    const SNAP_THRESHOLD = 30;
-
-    let newTiles = [...tiles];
-
-    for (let tile of newTiles) {
-      const neighbors = getNeighbors(tile.id);
-
-      for (let n of neighbors) {
-        const other = newTiles.find(t => t.id === n.id);
-        if (!other) continue;
-
-        // beda posisi seharusnya
-        const dx = other.correctX - tile.correctX;
-        const dy = other.correctY - tile.correctY;
-
-        // posisi sekarang
-        const actualDx = other.x - tile.x;
-        const actualDy = other.y - tile.y;
-
-        const dist = Math.hypot(dx - actualDx, dy - actualDy);
-
-        if (dist < SNAP_THRESHOLD) {
-          // 🔥 gabung group
-          const groupId = tile.group;
-
-          newTiles = newTiles.map(t => {
-            if (t.group === other.group) {
-              return { ...t, group: groupId };
-            }
-            return t;
-          });
-        }
-      }
-    }
-
-    return newTiles;
-  };
-
   useEffect(() => {
-    setTiles(createTiles());
-    setShapes(generateShapes(size));
+    // setTiles(createTiles());
+    // setShapes(generateShapes(size));
     setMounted(true);
   }, []);
 
@@ -193,9 +167,6 @@ export default function Home() {
         };
       });
 
-      // 🔥 SNAP antar piece
-      // updated = trySnapPieces(updated);
-
       // 🔥 SNAP ke posisi benar
       updated = updated.map((tile) => {
         const dist = Math.hypot(
@@ -204,6 +175,7 @@ export default function Home() {
         );
 
         if (dist < SNAP_DISTANCE) {
+          playSound(snapSound);
           return {
             ...tile,
             x: tile.correctX,
@@ -224,47 +196,179 @@ export default function Home() {
     if (!tiles.length) return;
 
     const win = tiles.every((t) => t.locked);
-    if (win) alert("🎉 Puzzle Selesai!");
+    if (win) {
+      setWin(true);
+      playSound(winSound);
+    }
   }, [tiles]);
 
   if (!mounted) return null;
 
-  return (
-    <div className="flex flex-col items-center justify-center min-w-[300vw] min-h-[300vh] sm:min-w-screen sm:min-h-screen bg-gray-200">
-      <h1 className="text-xl font-bold mb-4 text-black">Kezzle</h1>
+  if (!started) {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 text-black">
+        <div className="bg-white rounded-xl p-6 w-[350px] shadow-xl">
+          <h2 className="text-lg font-bold mb-4 text-black">
+            Start Puzzle
+          </h2>
 
-      <DndContext onDragEnd={handleDragEnd}>
-        <div
-          style={{
-            width: size * tileSize,
-            height: size * tileSize,
-            position: "relative",
-            border: "2px solid #ccc",
-            backgroundColor: "white",
-            margin: "400px" // 🔥 ruang buat piece luar
-          }}
-        >
-          {tiles.map((tile) => {
-            const row = Math.floor(tile.id / size);
-            const col = tile.id % size;
-            const shape = shapes[row]?.[col];
+          {/* SIZE */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">
+              Ukuran Puzzle
+            </label>
+            <select
+              className="w-full border rounded px-3 py-2"
+              onChange={(e) => setSize(Number(e.target.value))}
+            >
+              <option value="">Pilih ukuran</option>
+              <option value="3">3 x 3</option>
+              <option value="4">4 x 4</option>
+              <option value="5">5 x 5</option>
+              <option value="6">6 x 6</option>
+              <option value="7">7 x 7</option>
+              <option value="8">8 x 8</option>
+              <option value="9">9 x 9</option>
+              <option value="10">10 x 10</option>
+            </select>
+          </div>
 
-            return (
-              <Tile
-                key={tile.id}
-                tile={tile}
-                shape={shape}
-              />
-            );
-          })}
+          {/* IMAGE */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">
+              Pilih Gambar
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {["/puzzle1.jpg", "/puzzle2.jpg", "/puzzle3.jpg"].map((img) => (
+                <img
+                  key={img}
+                  src={img}
+                  onClick={() => setImage(img)}
+                  className={`cursor-pointer rounded border-2 ${
+                    image === img ? "border-blue-500" : "border-transparent"
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* START BUTTON */}
+          <button
+            disabled={!size}
+            onClick={() => {
+              if (!image) {
+                setImage(getRandomImage()); // 🔥 random otomatis
+              }
+              setStarted(true);
+            }}
+            className="w-full bg-blue-500 text-white py-2 rounded disabled:bg-gray-300"
+          >
+            Start Game
+          </button>
         </div>
-      </DndContext>
-    </div>
-  );
+      </div>
+    );
+  } else {
+    const boardSize = size * tileSize;
+
+    const resetGame = () => {
+      const newImage = getRandomImage(size);
+
+      setImage(newImage);
+      setWin(false);
+      setTiles(createTiles());
+      setShapes(generateShapes(size));
+    };
+    return (
+      <div className="flex flex-col items-center justify-center min-w-[300vw] min-h-[300vh] sm:min-w-screen sm:min-h-screen bg-gray-200">
+        {/* HEADER */}
+        <h1 className="text-2xl font-bold mb-6 text-black">
+          Kezzle
+        </h1>
+
+        {/* BOARD WRAPPER (yang dikasih spacing) */}
+        <div className="p-20"> {/* ganti margin 400px jadi padding */}
+          <DndContext onDragEnd={handleDragEnd}>
+            <div
+              style={{
+                width: boardSize + tab - 4,
+                height: boardSize + tab - 3,
+                position: "relative",
+                borderRadius: "16px",
+                overflow: "visible",
+
+                // 🪵 texture kayu (nanti kamu ganti url sendiri)
+                backgroundImage: "url('/wood-texture.png')",
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+
+                // 🧱 border realistic
+                border: "8px solid #8b5a2b",
+
+                // 🌑 outer shadow (angkat dari background)
+                boxShadow: `
+                  0 20px 40px rgba(0,0,0,0.3),
+                  inset 0 6px 12px rgba(255,255,255,0.2),
+                  inset 0 -6px 12px rgba(0,0,0,0.4)
+                `,
+
+                margin: "400px",
+              }}
+            >
+              {tiles.map((tile) => {
+                const row = Math.floor(tile.id / size);
+                const col = tile.id % size;
+                const shape = shapes[row]?.[col];
+
+                return (
+                  <Tile
+                    key={tile.id}
+                    tile={tile}
+                    shape={shape}
+                    image={image}
+                    size={size}
+                  />
+                );
+              })}
+            </div>
+          </DndContext>
+        </div>
+
+        {win && (
+          <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50">
+            
+            <div className="bg-white p-6 rounded-xl text-center shadow-xl text-black">
+              <h2 className="text-2xl font-bold mb-4">🎉 You Win!</h2>
+
+              <div className="flex gap-2 justify-center">
+                <button
+                  onClick={resetGame}
+                  className="bg-blue-500 text-white px-4 py-2 rounded"
+                >
+                  🔄 Random Image
+                </button>
+
+                <button
+                  onClick={() => {
+                    setStarted(false);
+                    setWin(false);
+                  }}
+                  className="bg-gray-500 text-white px-4 py-2 rounded"
+                >
+                  ⚙️ Change Settings
+                </button>
+              </div>
+            </div>
+
+          </div>
+        )}
+      </div>
+    );
+  }
 }
 
 // 🧩 Tile Component
-function Tile({ tile, shape }) {
+function Tile({ tile, shape, image, size }) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: tile.id,
     disabled: tile.locked
@@ -279,10 +383,18 @@ function Tile({ tile, shape }) {
       : undefined,
     transition: tile.locked ? "all 0.2s ease" : undefined,
     cursor: tile.locked ? "default" : "grab",
-    opacity: tile.locked ? 0.8 : 1,
+    opacity: 1,
     touchAction: "none", // 🔥 WAJIB buat mobile
     userSelect: "none",
     WebkitUserSelect: "none",
+
+    // ✨ REALISTIC SHADOW
+    filter: tile.locked
+      ? "drop-shadow(0 2px 2px rgba(0,0,0,0.3))"
+      : "drop-shadow(0 6px 8px rgba(0,0,0,0.4))",
+
+    // 🔥 biar keliatan beda saat diangkat
+    zIndex: transform ? 10 : tile.locked ? 1 : 5,
   };
 
   return (
@@ -301,7 +413,7 @@ function Tile({ tile, shape }) {
 
         {/* IMAGE */}
         <image
-          href="/puzzle2.jpg"
+          href={image} // 🔥 dari state
           width={size * 100 + tab * 2}
           height={size * 100 + tab * 2}
           x={-(tile.id % size) * 100 - tab}
@@ -316,8 +428,8 @@ function Tile({ tile, shape }) {
           <path
             d={createPath(shape)}
             fill="none"
-            stroke="black"
-            strokeWidth="2"
+            stroke="rgba(0,0,0,0.25)"
+            strokeWidth="1.5"
           />
         )}
       </svg>
