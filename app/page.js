@@ -279,7 +279,10 @@ function Tile({ tile, shape }) {
       : undefined,
     transition: tile.locked ? "all 0.2s ease" : undefined,
     cursor: tile.locked ? "default" : "grab",
-    opacity: tile.locked ? 0.8 : 1
+    opacity: tile.locked ? 0.8 : 1,
+    touchAction: "none", // 🔥 WAJIB buat mobile
+    userSelect: "none",
+    WebkitUserSelect: "none",
   };
 
   return (
