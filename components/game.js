@@ -13,65 +13,42 @@ const handleLogout = async () => {
   window.location.href = "/";
 };
 
-const getRandomAnimeImage = async () => {
+// 🎌 LOCAL ANIME / KPOP
+const getRandomLocalImage = (category) => {
+  const max = category === "anime" ? 203 : 64;
+
+  const randomNumber = Math.floor(Math.random() * max) + 1;
+
+  return `/puzzle/${category}/${randomNumber}.jpg`;
+};
+
+// 🌍 GENERAL IMAGE (API + fallback)
+const getRandomGeneralImage = async (size) => {
   try {
-    // 🎲 random page (Jikan biasanya sampai ratusan page)
-    const randomPage = Math.floor(Math.random() * 50) + 1;
+    // Picsum random image (lebih stabil dari random query string saja)
+    const dimension = size * 100 + 200;
 
     const res = await fetch(
-      `https://api.jikan.moe/v4/anime?page=${randomPage}`
+      `https://picsum.photos/${dimension}/${dimension}`
     );
-    const data = await res.json();
 
-    const list = data.data;
-
-    // 🎯 random anime dari page
-    const randomAnime =
-      list[Math.floor(Math.random() * list.length)];
-
-    return randomAnime.images.jpg.large_image_url;
+    // Picsum langsung return image URL
+    return res.url;
   } catch (err) {
-    console.error("Anime fetch error:", err);
+    console.error("General image error:", err);
 
-    // fallback kalau error
+    // fallback
     return `https://picsum.photos/600/600?random=${Math.random()}`;
   }
 };
 
-const getRandomAnimalImage = async () => {
-  try {
-    const isDog = Math.random() > 0.5;
-
-    if (isDog) {
-      const res = await fetch("https://dog.ceo/api/breeds/image/random");
-      const data = await res.json();
-      return data.message;
-    } else {
-      const res = await fetch("https://api.thecatapi.com/v1/images/search");
-      const data = await res.json();
-      return data[0].url;
-    }
-  } catch (err) {
-    console.error("Animal error:", err);
-    return `https://picsum.photos/600/600?random=${Math.random()}`;
-  }
-};
-
-const getRandomGeneralImage = (size) => {
-  const dimension = (size * 100) + 200;
-  return `https://picsum.photos/${dimension}/${dimension}?random=${Math.random()}`;
-};
-
+// 🎯 MAIN FUNCTION
 const getRandomImage = async (size, category) => {
-  if (category === "anime") {
-    return await getRandomAnimeImage();
+  if (category === "anime" || category === "kpop") {
+    return getRandomLocalImage(category);
   }
 
-  if (category === "animal") {
-    return await getRandomAnimalImage();
-  }
-
-  return getRandomGeneralImage(size); // default random
+  return await getRandomGeneralImage(size);
 };
 
 const formatTime = (time) => {
@@ -161,14 +138,22 @@ export default function Game() {
   const [started, setStarted] = useState(false);
 
   const [showHint, setShowHint] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [showZoomOut, setShowZoomOut] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowZoomOut(false);
+    }, 5000); // 2 detik
+
+    return () => clearTimeout(timer);
+  }, []);
 
   const [roomId, setRoomId] = useState(null);
   const [rooms, setRooms] = useState([]);
 
   const [time, setTime] = useState(0);
   const [running, setRunning] = useState(false);
-  const [isLoadingSaved, setIsLoadingSaved] = useState(false);
 
   const [win, setWin] = useState(false);
 
@@ -178,9 +163,9 @@ export default function Game() {
   const [category, setCategory] = useState("");
 
   const categories = [
-    { label: "Random", value: "random" },
     { label: "Anime", value: "anime" },
-    { label: "Cats & Dogs", value: "animal" },
+    { label: "KPOP", value: "kpop" },
+    { label: "Random", value: "random" },
   ];
 
   // 🎲 generate tiles (client only)
@@ -252,6 +237,7 @@ export default function Game() {
           y: tile.y + delta.y
         };
       });
+      playSound(snapSound);
 
       // 🔥 SNAP ke posisi benar
       updated = updated.map((tile) => {
@@ -261,7 +247,6 @@ export default function Game() {
         );
 
         if (dist < SNAP_DISTANCE) {
-          playSound(snapSound);
           return {
             ...tile,
             x: tile.correctX,
@@ -276,7 +261,6 @@ export default function Game() {
       return updated;
     });
   };
-
 
   useEffect(() => {
     if (!started || !tiles.length || !roomId) return;
@@ -352,32 +336,39 @@ export default function Game() {
   }, [tiles]);
 
   const createNewRoom = async () => {
-    const user = await getUser();
-    if (!user) return;
+    if (!size || !category || creating) return;
 
-    const newRoomId = crypto.randomUUID();
+    setCreating(true);
 
-    const img = await getRandomImage(size, category);
+    try {
+      const user = await getUser();
+      if (!user) return;
 
-    const initialTiles = createTiles();
+      const newRoomId = crypto.randomUUID();
 
-    await supabase.from("games").insert({
-      user_id: user.id,
-      room_id: newRoomId,
-      size,
-      image: img,
-      tiles: initialTiles,
-      time: 0,
-      is_finished: false,
-    });
+      const img = await getRandomImage(size, category);
+      const initialTiles = createTiles();
 
-    setRoomId(newRoomId);
-    setImage(img);
-    setTiles(initialTiles);
-    setTime(0);
-    setStarted(true);
-    setRunning(true);
-    initNewGame();
+      await supabase.from("games").insert({
+        user_id: user.id,
+        room_id: newRoomId,
+        size,
+        image: img,
+        tiles: initialTiles,
+        time: 0,
+        is_finished: false,
+      });
+
+      setRoomId(newRoomId);
+      setImage(img);
+      setTiles(initialTiles);
+      setTime(0);
+      setStarted(true);
+      setRunning(true);
+      initNewGame();
+    } finally {
+      setCreating(false);
+    }
   };
 
   const loadRoom = async (room_id) => {
@@ -391,8 +382,6 @@ export default function Game() {
       .single();
 
     if (data) {
-      setIsLoadingSaved(true); // 🔥 penting
-
       setRoomId(room_id);
       setSize(data.size);
       setImage(data.image);
@@ -401,19 +390,47 @@ export default function Game() {
       setTime(data.time);
       setStarted(true);
       setRunning(true);
-
-      setTimeout(() => {
-        setIsLoadingSaved(false); // reset lagi setelah ready
-      }, 500);
     }
+  };
+
+  const deleteRoom = async (room_id) => {
+    const user = await getUser();
+    if (!user) return;
+
+    const confirmDelete = confirm("Delete this room?");
+    if (!confirmDelete) return;
+
+    await supabase
+      .from("games")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("room_id", room_id);
+
+    // update UI
+    setRooms((prev) => prev.filter((r) => r.room_id !== room_id));
   };
 
   if (!mounted) return null;
 
   if (!started) {
     return (
-      <div className="fixed inset-0 flex flex-col sm:flex-row gap-4 items-center justify-center bg-black/60 z-50 text-black">
-        <div className="bg-white rounded-xl p-6 w-[350px] shadow-xl">
+      <div className="fixed inset-0 flex flex-col sm:flex-row gap-4 items-center justify-center bg-gray-300 z-50 text-black">
+
+        <img
+          src={"/background-game.jpg"}
+          className="w-full h-full fixed top-0 left-0 -z-10 opacity-30 object-cover"
+        />
+
+        <img
+          src={"/logo_kezzle.png"}
+          className="w-20 sm:w-40 fixed top-4 left-4 z-30"
+        />
+
+        <button onClick={handleLogout} className="fixed top-4 right-4 bg-red-500 text-white px-3 py-1 rounded z-30">
+          Logout
+        </button>
+
+        <div className="bg-white rounded-xl p-6 w-[350px] shadow-xl z-10 relative">
           <h2 className="text-lg font-bold mb-4 text-black">
             Start Puzzle
           </h2>
@@ -461,35 +478,59 @@ export default function Game() {
           <div className="mt-4">
             <button
               onClick={createNewRoom}
-              className="bg-green-500 text-white px-3 py-2 rounded w-full"
+              disabled={!size || !category || creating}
+              className={`w-full px-3 py-2 rounded transition flex items-center justify-center gap-2
+                ${!size || !category || creating
+                  ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                  : "bg-green-500 text-white hover:bg-green-600"
+                }
+              `}
             >
-              + Create New Room
+              {creating ? (
+                <>
+                  <span className="animate-spin border-2 border-white border-t-transparent rounded-full w-4 h-4"></span>
+                  Creating...
+                </>
+              ) : (
+                "+ Create New Room"
+              )}
             </button>
           </div>
-
-          <button onClick={handleLogout} className="fixed top-4 right-4 bg-red-500 text-white px-3 py-1 rounded">
-            Logout
-          </button>
         </div>
 
-        <div className="bg-white rounded-xl p-6 w-[350px] shadow-xl">
+        <div className="bg-white rounded-xl p-6 w-[350px] shadow-xl z-10 relative">
           <h2 className="text-lg font-bold mb-4 text-black">
             Your Rooms
           </h2>
-              {/* test */}
-          <div className="mt-4">
-            <div className="mt-3 space-y-2 max-h-[200px] overflow-auto">
-              {rooms.map((r) => (
+
+          <div className="mt-3 space-y-2 max-h-[200px] overflow-auto">
+            {rooms.length === 0 && (
+              <p className="text-gray-400 text-sm">No rooms yet</p>
+            )}
+
+            {rooms.map((r) => (
+              <div
+                key={r.room_id}
+                className="p-2 bg-gray-100 rounded flex items-center justify-between hover:bg-gray-200"
+              >
+                {/* klik untuk load room */}
                 <div
-                  key={r.room_id}
                   onClick={() => loadRoom(r.room_id)}
-                  className="p-2 bg-gray-100 rounded cursor-pointer hover:bg-gray-200"
+                  className="cursor-pointer flex-1"
                 >
                   🎮 Room {r.room_id.slice(0, 6)} <br />
                   ⏱ {formatTime(r.time)}
                 </div>
-              ))}
-            </div>
+
+                {/* delete button */}
+                <button
+                  onClick={() => deleteRoom(r.room_id)}
+                  className="ml-2 text-red-500 hover:text-red-700 text-sm"
+                >
+                  Delete
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -512,18 +553,40 @@ export default function Game() {
     return (
       <div
         className={`flex flex-col items-center justify-center bg-gray-200 overflow-hidden sm:min-w-screen sm:min-h-screen ${dynamicMargin === 600
-            ? "min-w-[600vw] min-h-[600vh]"
-            : "min-w-[300vw] min-h-[300vh]"
+          ? "min-w-[600vw] min-h-[600vh]"
+          : "min-w-[300vw] min-h-[300vh]"
           }`}
       >
-        {/* HEADER */}
-        <h1 className="text-[5rem] font-bold mb-6 text-black mt-40">
-          Kezzle
-        </h1>
+        {showZoomOut && (
+          <div className="sm:hidden absolute top-0 left-0 w-[100vw] h-[100vh] flex justify-center items-center border-dashed border-4 border-gray-400 animate-pulse">
+            <p className="text-black font-bold text-5xl text-center">Zoom Out</p>
+          </div>
+        )}
 
-        <div className="bg-black text-white px-4 py-1 rounded">
+        <img
+          src={"/background-game.jpg"}
+          className="w-full h-full fixed top-0 left-0 z-0 opacity-30 object-cover"
+        />
+
+        {/* HEADER */}
+        {/* <h1 className="text-[5rem] font-bold mb-6 text-black mt-40">
+          Kezzle
+        </h1> */}
+        <img
+          src={"/logo_kezzle.png"}
+          className="w-84 mt-40 relative z-10"
+        />
+
+        <div className="bg-black text-white px-4 py-1 rounded relative z-10">
           ⏱ {formatTime(time)}
         </div>
+
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-blue-500 text-white rounded-lg mt-2 cursor-pointer relative z-10"
+        >
+          Back to Main Menu
+        </button>
 
         {/* BOARD WRAPPER (yang dikasih spacing) */}
         <div className="p-20 pt-0">
@@ -573,36 +636,33 @@ export default function Game() {
           </DndContext>
         </div>
 
-        <div className="fixed bottom-6 right-6 z-40">
+        <div className="fixed bottom-16 right-16 sm:bottom-10 sm:right-10 z-40">
           {/* 🔘 BUTTON */}
           <div
-            onMouseDown={() => setShowHint(true)}
-            onMouseUp={() => setShowHint(false)}
-            onMouseLeave={() => setShowHint(false)}
-            onTouchStart={() => setShowHint(true)}
-            onTouchEnd={() => setShowHint(false)}
+            onClick={() => setShowHint(!showHint)}
             className="cursor-pointer select-none"
           >
-            <div className="bg-black/70 text-white text-xs px-3 py-1 rounded-t text-center">
-              Hold Hint
-            </div>
+            {!showHint ? (
+              // 👉 MODE ICON (hidden)
+              <div className="bg-black/70 text-white px-3 py-2 rounded-lg shadow-lg">
+                👁 Show Hint
+              </div>
+            ) : (
+              // 👉 MODE IMAGE (visible)
+              <div>
+                <div className="bg-black/70 text-white text-xs px-3 py-1 rounded-t text-center">
+                  Click to Hide
+                </div>
 
-            {/* 🖼 IMAGE PREVIEW */}
-            <div className="relative">
-              <img
-                src={image}
-                className={`w-40 h-40 object-cover rounded-b shadow-lg border-2 border-white transition-all duration-200
-                  ${showHint ? "opacity-100 scale-100" : "opacity-30 scale-95"}
-                `}
-              />
-
-              {/* overlay gelap saat hidden */}
-              {!showHint && (
-                <div className="absolute inset-0 bg-black/40 rounded-b"></div>
-              )}
-            </div>
+                <div className="relative">
+                  <img
+                    src={image}
+                    className="w-80 h-80 sm:w-48 sm:h-48 object-contain rounded-b shadow-lg border-2 border-white transition-all duration-200"
+                  />
+                </div>
+              </div>
+            )}
           </div>
-
         </div>
 
         {win && (
@@ -686,16 +746,26 @@ function Tile({ tile, shape, image, size }) {
           </clipPath>
         </defs>
 
+        {/* background */}
+        <rect
+          fill="#ddd"
+          width={size * 100 + tab * 2}
+          height={size * 100 + tab * 2}
+          x={-(tile.id % size) * 100 - tab}
+          y={-Math.floor(tile.id / size) * 100 - tab}
+          clipPath={`url(#clip-${tile.id})`}
+        />
+
         {/* IMAGE */}
         <image
+          className="bg-white"
           href={image} // 🔥 dari state
           width={size * 100 + tab * 2}
           height={size * 100 + tab * 2}
           x={-(tile.id % size) * 100 - tab}
           y={-Math.floor(tile.id / size) * 100 - tab}
           clipPath={`url(#clip-${tile.id})`}
-          preserveAspectRatio="none"
-          style={{ imageRendering: "pixelated" }}
+          preserveAspectRatio="xMidYMid meet"
         />
 
         {/* 🔥 BORDER */}

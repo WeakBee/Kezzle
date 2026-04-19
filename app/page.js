@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import { useAuthGuard } from "@/lib/useAuthGuard";
 
 export default function AuthPage() {
+  useAuthGuard(true); 
   const [mode, setMode] = useState("login"); // login | register
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -34,6 +36,7 @@ export default function AuthPage() {
 
       if (error) {
         setErrorMsg(error.message);
+        console.log(error);
       } else {
         // 🔥 cek apakah perlu verifikasi email
         if (data.user && !data.session) {
@@ -62,7 +65,12 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-200">
+    <div className="min-h-screen flex flex-col gap-4 items-center justify-center bg-gray-200">
+      
+        <img
+          src={"/logo_kezzle.png"}
+          className="w-68 relative z-10"
+        />
       <div className="bg-white p-6 rounded-xl w-[360px] shadow-xl">
         <h1 className="text-xl font-bold mb-4 text-center text-black">
           {mode === "login" ? "Login" : "Register"}
