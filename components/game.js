@@ -593,7 +593,7 @@ export default function Game() {
         </button>
 
         {/* BOARD WRAPPER (yang dikasih spacing) */}
-        <div className="p-20 pt-0">
+        <div className="p-20 pt-0 relative z-20">
           <DndContext onDragEnd={handleDragEnd}>
             <div
               style={{
@@ -607,6 +607,8 @@ export default function Game() {
                 backgroundImage: "url('/wood-texture.png')",
                 backgroundSize: "cover",
                 backgroundPosition: "center",
+
+                transform: "translateZ(0)",
 
                 // 🧱 border realistic
                 border: "8px solid #8b5a2b",
@@ -717,8 +719,9 @@ function Tile({ tile, shape, image, size }) {
     position: "absolute",
     left: tile.x,
     top: tile.y,
+    willChange: "transform",
     transform: transform
-      ? `translate(${transform.x}px, ${transform.y}px)`
+      ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
       : undefined,
     transition: tile.locked ? "all 0.2s ease" : undefined,
     cursor: tile.locked ? "default" : "grab",
@@ -726,9 +729,12 @@ function Tile({ tile, shape, image, size }) {
     touchAction: "none", // 🔥 WAJIB buat mobile
     userSelect: "none",
     WebkitUserSelect: "none",
+    
 
     // ✨ REALISTIC SHADOW
-    filter: tile.locked
+    filter: transform
+      ? "none"
+      : tile.locked
       ? "drop-shadow(0 2px 2px rgba(0,0,0,0.3))"
       : "drop-shadow(0 6px 8px rgba(0,0,0,0.4))",
 
@@ -752,7 +758,7 @@ function Tile({ tile, shape, image, size }) {
 
         {/* background */}
         <rect
-          fill="#ddd"
+          fill="#dbf3ff"
           width={size * 100 + tab * 2}
           height={size * 100 + tab * 2}
           x={-(tile.id % size) * 100 - tab}
@@ -762,7 +768,6 @@ function Tile({ tile, shape, image, size }) {
 
         {/* IMAGE */}
         <image
-          className="bg-white"
           href={image} // 🔥 dari state
           width={size * 100 + tab * 2}
           height={size * 100 + tab * 2}
