@@ -142,12 +142,16 @@ export default function Game() {
   const [showZoomOut, setShowZoomOut] = useState(true);
 
   useEffect(() => {
+    if (!started) return;
+
+    setShowZoomOut(true);
+
     const timer = setTimeout(() => {
       setShowZoomOut(false);
-    }, 5000); // 2 detik
+    }, 3000); // 3 detik biar gak kelamaan
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [started]);
 
   const [roomId, setRoomId] = useState(null);
   const [rooms, setRooms] = useState([]);
